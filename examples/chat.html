@@ -1,0 +1,330 @@
+<!DOCTYPE HTML> 
+<html lang="en"> 
+<head>
+<title>PeerJS lib</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"> 
+<meta http-equiv="Content-Language" content="en-us"> 
+
+<link href="fancy.css" rel="stylesheet" type="text/css">
+
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.8/jquery.min.js"></script>
+<script type="text/javascript" src="../dist/peer.js"></script>
+
+<style>
+    
+	video {
+      width:  relative;
+      height:  relative;
+      border:  1px ridge #FF8888
+    } 
+    
+  </style>
+  
+<script>
+// Connect to PeerJS, have server assign an ID instead of providing one
+// Showing off some of the configs available with PeerJS :).
+navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+var counter = 0,counterV = 0;
+var isLocalVid = false;
+var peer = new Peer({
+  // Set API key for cloud server (you don't need this if you're running your
+  // own.
+  key: 'x7fwx2kavpy6tj4i',
+
+  // Set highest debug level (log everything!).
+  debug: 5,
+
+  logFunction: function() {
+    var copy = Array.prototype.slice.call(arguments).join(' ');
+    $('.log').append(copy + '<br>');
+  }
+});
+var connectedPeers = {};
+
+// Show this peer's ID.
+peer.on('open', function(id){
+  $('#pid').text(id); 	
+ });
+
+// Await connections from others
+peer.on('connection', connect);
+
+peer.on('error', function(err) {
+  console.log(err);
+})
+
+ // Receiving a call
+peer.on('call', function(call){
+  
+  if (isLocalVid ===true){
+	call.answer(window.localStream);
+	waiting(call); 
+  }
+});
+
+function waiting(call) {
+     
+      call.on('stream', function(stream){      
+		
+		counterV++;
+		$('.log').append('captured [remote-stream] from ' + peer.id + '<br>');  
+		$('.filler-vid').text('Video stream(s) = '+counterV);
+		
+		var vidbox = $('<div></div>').addClass('cnvid').attr('id', c.peer);
+		var header = $('<h1></h1>').html('<strong>' + c.peer + '</strong>');
+		var frame = $('<video></video>').html('<video id = "remote" autoplay></video>')
+		$('#remote').prop('src', URL.createObjectURL(stream));
+		
+		vidbox.append(header);
+		vidbox.append(frame);
+      });
+    }
+
+function connect(c) {
+  // Handle a chat connection.
+  
+  if (c.label === 'chat') {
+    var chatbox = $('<div></div>').addClass('connection').addClass('active').attr('id', c.peer);
+    var header = $('<h1></h1>').html('<strong>' + c.peer + '</strong>');
+    var messages = $('<div><em>Connected on '+getDate()+'</em></div>').addClass('messages');
+    
+	chatbox.append(header);
+    chatbox.append(messages);
+	
+	connectedPeers[c.peer] = 1;
+	counter++;
+	$('.filler').text('Number of connection(s) = ' + counter);
+ 
+    // select user
+    chatbox.on('click', function() {
+      if ($(this).attr('class').indexOf('active') === -1) $(this).addClass('active');
+       else $(this).removeClass('active');
+    });
+    // add chat box
+	$('#connections').append(chatbox);
+
+	// onReceived
+    c.on('data', function(data) {
+      messages.append('<div><span class="peer">' + c.peer + '</span>: ' + data +'</div>');
+	});
+    
+	// onClose
+	c.on('close', function() {
+	
+	  c.close(); 
+	  connectedPeers[c.peer] = 0;
+      counter--;
+
+	  delete connectedPeers[c.peer];
+	  
+	  alert(c.peer + ' has left the chat.');
+      chatbox.remove();
+	  $('.filler').text('Number of connection(s) = '+counter);	  
+	  
+      });
+  } 
+  else alert('Username is empty');
+  
+}
+
+$(document).ready(function() {
+  
+  
+  function doNothing(e){
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  
+  // connect-button [onClick]
+  $('#connect').click(function() {
+    
+	$('.log').append('[Send request clicked]<br>');
+	
+	var requestedPeer = $('#rid').val();
+    if (!connectedPeers[requestedPeer]) {
+      
+      var c = peer.connect(requestedPeer, {
+        label: 'chat',
+        serialization: 'none',
+        metadata: {message: 'hi i want to chat with you!'}
+      });
+      
+	  c.on('open', function() {
+        connect(c);
+	  });
+      
+	  c.on('error', function(err) { 
+	  alert('[data-channel] ' + err); 
+	  });  
+    }
+	connectedPeers[requestedPeer] = 1;
+    
+  });
+
+  
+function getUserMedia() {
+      // constructor: audio/video options - onSuccess - onError
+      navigator.getUserMedia({audio: true, video: true},
+	  function(stream){
+      $('.log').append('OK! got local-stream'+'<br>');  
+	  window.localStream = stream;
+      isLocalVid = true;
+	  counterV++;
+	  },
+	  function(){ 
+	  $('.log').append('getUserMedia() error!'+'<br>'); 
+	  isLocalVid = false;
+	  });
+}
+	
+  // get A/V [onClick]
+  $('#stream-open').click(function(){
+	$('.log').append('[Access A/V clicked]<br>');
+	getUserMedia();
+	
+	var requestedPeer = $('#rid').val();
+    
+	if (connectedPeers[requestedPeer]) {
+    
+		if (isLocalVid === true){
+	 
+		var v = peer.call(requestedPeer, window.localStream);	
+		
+		v.on('error',function(err){
+		$('.log').append('vid error: '+error + '<br>');  
+		});
+		
+		v.on('close', function(){
+		// local or remote
+		counterV--;
+		$('.log').append('vid closed: ' + '<br>');	 
+		$('.filler-vid').text('Video stream(s) = '+counterV);
+		isLocalVid = false;
+		});
+		waiting(v);
+				
+		}
+		else alert('localStream not found!');	
+	}
+		
+  });
+  
+  // log-clear [onClick]
+  $('#log-clear').click(function(){
+	$('.log').text('');
+	$('.log').append('[Clear log clicked]<br>');	
+  });
+  
+  // close-button [onClick]
+  $('#close').click(function() {
+    $('.log').append('[Terminate. clicked]<br>');
+	eachActiveConnection(function(c) {
+    c.close();
+    });
+  });
+
+  // send-button [onClick]
+  $('#send').submit(function(e) {
+    
+	$('.log').append('[Send text clicked]<br>');	
+	e.preventDefault(); 
+    var msg = $('#text').val();
+    eachActiveConnection(function(c, $c) {
+      if (c.label === 'chat') {
+        c.send(msg);
+        $c.find('.messages').append('<div><span class="you">Me: </span>' + msg + '</div>');
+      }
+    });
+    // set default value
+	$('#text').val('');
+    $('#text').focus();
+  });
+
+  // Goes through each active peer and calls FN on its connections.
+  function eachActiveConnection(fn) {
+    var actives = $('.active');
+    var checkedIds = {};
+    actives.each(function() {
+      var peerId = $(this).attr('id');
+
+      if (!checkedIds[peerId]) {
+        var conns = peer.connections[peerId];
+		var conn = conns[conns.length-1];
+        console.log('eachActiveConnection trigger');
+		fn(conn, $(this));
+        }
+      checkedIds[peerId] = 1;
+
+    });
+  }
+  
+  // Show browser version
+  $('#browsers').text(navigator.userAgent);
+});
+
+// Make sure things clean up properly.
+
+window.onunload = window.onbeforeunload = function(e) {
+  if (!!peer && !peer.destroyed) {
+    peer.destroy();
+  }
+};
+
+function addZero(i) {
+    if (i < 10) {
+        i = "0" + i;
+    }
+    return i;
+}
+
+function getDate() {
+    var d = new Date();
+    var x = document.getElementById("demo");
+    var h = addZero(d.getHours());
+    var m = addZero(d.getMinutes());
+    var s = addZero(d.getSeconds());
+    return h + ":" + m + ":" + s;
+}
+
+
+</script>
+</head> 
+ 
+<body> 
+
+
+  <div id="actions">
+    
+	<form id="fl">
+		<label>Your ID</label> <span id="pid"></span>
+		
+	</form>
+	
+	<form id ="fr"> 
+		<input type="text" id="rid" placeholder = "Remote ID"> 
+		<input class="button" type="button" value="Send Request" id="connect">
+		<input class="button" type="button" value ="Access A/V" id ="stream-open">
+	</form>
+	
+	
+    <form id="send">
+		
+		<input type="text" id="text" placeholder="Outgoing message">
+		<input class="button" type="submit" value="Send text">
+		<input id="log-clear" class="button" type="button" value="Clear log">
+		<input id ="close" class="button" type="button" value="Terminate.">
+		
+	</form>
+	
+  </div>
+
+  <div id="wrap"><div id="connections"><span class="filler">Number of connection(s) = 0</span></div>
+  <div class="clear"></div></div>
+  <div id="wrap2"><div id="connections-vid"><span class="filler-vid">Video stream(s) = 0</span></div>
+  <div class="clear"></div></div>
+  
+<div class="log" style="color:#FF8888;text-shadow:none;padding:15px;background:#eee"><strong>Connection Status</strong>:<br></div>
+
+</div>
+</body> 
+</html> 
